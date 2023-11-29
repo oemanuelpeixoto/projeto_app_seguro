@@ -7,28 +7,13 @@ import java.util.List;
 
 public class VeiculoDAO {
     private Connection connection;
+    private Veiculo veiculo;
+    private int idPessoa;
 
     public VeiculoDAO() {
         this.connection = new Conexao().GeraConexao();
     }
 
-    public void salvarVeiculo(Veiculo veiculo, int idPessoa) throws SQLException {
-        // Verifica se o veículo já existe no banco de dados
-        Veiculo existente = buscarVeiculoPorId(veiculo.getIdVeiculo());
-
-
-        if (existente != null) {
-            // Se existir, realiza uma atualização
-            atualizarVeiculo(veiculo);
-        } else {
-            // Se não existir, realiza uma inserção
-            inserirVeiculo(veiculo);
-            int idVeiculo = obterUltimoIdInserido(); // Correção aqui
-            associarVeiculoAPessoa(idVeiculo, idPessoa);
-
-            System.out.println("Veículo cadastrado com sucesso e associado à pessoa.");
-        }
-    }
 
     private int obterUltimoIdInserido() throws SQLException {
         String query = "SELECT LAST_INSERT_ID() as last_id";
@@ -37,10 +22,56 @@ public class VeiculoDAO {
             if (resultSet.next()) {
                 return resultSet.getInt("last_id");
             } else {
-                throw new SQLException("Erro ao obter o último ID inserido.");
+                throw new SQLException("Erro ao obter o último ID inserido. Nenhum resultado retornado.");
             }
+        } catch (SQLException e) {
+            throw new SQLException("Erro ao obter o último ID inserido.", e);
         }
     }
+
+    public void salvarVeiculo(Veiculo veiculo, int idPessoa) throws SQLException {
+        this.veiculo = veiculo;
+        this.idPessoa = idPessoa;
+        // Verifica se o veículo já existe no banco de dados
+        Veiculo existente = buscarVeiculoPorId(veiculo.getIdVeiculo());
+
+        if (existente != null) {
+            // Se existir, realiza uma atualização
+            atualizarVeiculo(veiculo);
+        } else {
+            // Se não existir, realiza uma inserção
+            inserirVeiculo(veiculo, idPessoa);
+            System.out.println("Veículo cadastrado com sucesso e associado à pessoa.");
+        }
+    }
+
+    private void inserirVeiculo(Veiculo veiculo, int idPessoa) throws SQLException {
+        String sql = "INSERT INTO Veiculo (placa, ano, modelo, status, seguradora, id_pessoa) VALUES (?, ?, ?, ?, ?, ?)";
+
+        try (PreparedStatement preparedStatement = connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+            preparedStatement.setString(1, veiculo.getPlaca());
+            preparedStatement.setInt(2, veiculo.getAno());
+            preparedStatement.setString(3, veiculo.getModelo());
+            preparedStatement.setString(4, veiculo.getStatus());
+            preparedStatement.setString(5, veiculo.getSeguradora());
+            preparedStatement.setInt(6, idPessoa);
+
+            preparedStatement.executeUpdate();
+
+            // Recuperar o ID gerado automaticamente (se necessário)
+            try (ResultSet generatedKeys = preparedStatement.getGeneratedKeys()) {
+                if (generatedKeys.next()) {
+                    veiculo.setIdVeiculo(generatedKeys.getInt(1));
+                } else {
+                    throw new SQLException("Falha ao obter o ID gerado para o veículo.");
+                }
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+            throw e;
+        }
+    }
+
 
     public List<Veiculo> buscarTodosVeiculos() throws SQLException {
         String query = "SELECT * FROM Veiculo";
@@ -61,52 +92,28 @@ public class VeiculoDAO {
         return veiculos;
     }
 
-    public void deletarVeiculo(int idVeiculo) throws SQLException {
-        String query = "DELETE FROM Veiculo WHERE idVeiculo = ?";
-
-        try (PreparedStatement preparedStatement = connection.prepareStatement(query)) {
-            preparedStatement.setInt(1, idVeiculo);
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            throw e;
-        }
-    }
-
-    private void inserirVeiculo(Veiculo veiculo) throws SQLException {
-        String sql = "INSERT INTO Veiculo (placa, ano, modelo, status, seguradora) VALUES (?, ?, ?, ?, ?)";
-
-        try (PreparedStatement preparedStatement = connection.prepareStatement(sql)) {
-            preparedStatement.setString(1, veiculo.getPlaca());
-            preparedStatement.setInt(2, veiculo.getAno());
-            preparedStatement.setString(3, veiculo.getModelo());
-            preparedStatement.setString(4, veiculo.getStatus());
-            preparedStatement.setString(5, veiculo.getSeguradora());
-
-            preparedStatement.executeUpdate();
-        } catch (SQLException e) {
-            e.printStackTrace();
-            throw e;
-        }
-    }
-
     private void atualizarVeiculo(Veiculo veiculo) throws SQLException {
         String query = "UPDATE Veiculo SET placa = ?, ano = ?, modelo = ?, status = ?, seguradora = ? WHERE idVeiculo = ?";
 
-        try (PreparedStatement preparedStatement = connection.prepareStatement(query)) {
-            preparedStatement.setString(1, veiculo.getPlaca());
-            preparedStatement.setInt(2, veiculo.getAno());
-            preparedStatement.setString(3, veiculo.getModelo());
-            preparedStatement.setString(4, veiculo.getStatus());
-            preparedStatement.setString(5, veiculo.getSeguradora());
-            preparedStatement.setInt(6, veiculo.getIdVeiculo());
+        try (PreparedStatement stmt = connection.prepareStatement(query)) {
+            stmt.setString(1, veiculo.getPlaca());
+            stmt.setInt(2, veiculo.getAno());
+            stmt.setString(3, veiculo.getModelo());
+            stmt.setString(4, veiculo.getStatus());
+            stmt.setString(5, veiculo.getSeguradora());
+            stmt.setInt(6, veiculo.getIdVeiculo());
 
-            preparedStatement.executeUpdate();
+            int linhasAfetadas = stmt.executeUpdate();
+            if (linhasAfetadas > 0) {
+                System.out.println("Veículo atualizado com sucesso.");
+            } else {
+                System.out.println("Nenhum veículo encontrado com o ID " + veiculo.getIdVeiculo());
+            }
         } catch (SQLException e) {
-            e.printStackTrace();
-            throw e;
+            throw new RuntimeException("Erro ao atualizar veículo: " + e.getMessage(), e);
         }
     }
+
 
     public void associarVeiculoAPessoa(int idVeiculo, int idPessoa) throws SQLException {
         String sql = "UPDATE Veiculo SET id_pessoa = ? WHERE idVeiculo = ?";

@@ -5,23 +5,45 @@ import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 
+
+
 public class PessoaDAO {
-    private Connection connection = new Conexao().GeraConexao();
+    private Connection connection;
+
+    public Connection getConnection() {
+        if (connection == null) {
+            connection = new Conexao().GeraConexao();
+        }
+        return connection;
+    }
 
     public PessoaDAO() {
+        this.connection = Conexao.GeraConexao();
     }
 
     public boolean adiciona(Pessoa pessoa) {
-        String sql = "INSERT INTO Pessoa(idPessoa, cpf, nomeCompleto, telefone, email) VALUES(?,?,?,?,?)";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, pessoa.getIdPessoa());
-            stmt.setString(2, pessoa.getCpf());
-            stmt.setString(3, pessoa.getNomeCompleto());
-            stmt.setString(4, pessoa.getTelefone());
-            stmt.setString(5, pessoa.getEmail());
-            stmt.execute();
-            System.out.println("Usuário cadastrado com sucesso.");
-            return true;
+        String sql = "INSERT INTO Pessoa(cpf, nomeCompleto, telefone, email) VALUES(?,?,?,?)";
+        try (PreparedStatement stmt = connection.prepareStatement(sql, PreparedStatement.RETURN_GENERATED_KEYS)) {
+            stmt.setString(1, pessoa.getCpf());
+            stmt.setString(2, pessoa.getNomeCompleto());
+            stmt.setString(3, pessoa.getTelefone());
+            stmt.setString(4, pessoa.getEmail());
+
+            int linhasAfetadas = stmt.executeUpdate();
+            if (linhasAfetadas > 0) {
+                try (ResultSet generatedKeys = stmt.getGeneratedKeys()) {
+                    if (generatedKeys.next()) {
+                        pessoa.setIdPessoa(generatedKeys.getInt(1));
+                    } else {
+                        throw new SQLException("Falha ao obter o ID gerado para a pessoa.");
+                    }
+                }
+                System.out.println("Usuário cadastrado com sucesso.");
+                return true;
+            } else {
+                System.out.println("Erro ao adicionar usuário. Nenhuma linha afetada.");
+                return false;
+            }
         } catch (SQLException e) {
             System.err.println("Erro ao adicionar usuário: " + e.getMessage());
             return false;
@@ -71,39 +93,19 @@ public class PessoaDAO {
     }
 
     public void atualizar(Pessoa pessoa) {
-        String sql = "UPDATE pessoa SET nomeCompleto=?, telefone=?, email=? WHERE idPessoa=?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
+        String sql = "UPDATE pessoa SET nomeCompleto = ?, telefone = ?, email = ? WHERE idPessoa = ?";
+        try {
+            PreparedStatement stmt = connection.prepareStatement(sql);
             stmt.setString(1, pessoa.getNomeCompleto());
             stmt.setString(2, pessoa.getTelefone());
             stmt.setString(3, pessoa.getEmail());
             stmt.setInt(4, pessoa.getIdPessoa());
-
-            int linhasAfetadas = stmt.executeUpdate();
-            if (linhasAfetadas > 0) {
-                System.out.println("Usuário atualizado com sucesso.");
-            } else {
-                System.out.println("Nenhum usuário encontrado com o ID " + pessoa.getIdPessoa());
-            }
+            stmt.executeUpdate();
+            stmt.close();
+            System.out.println("Pessoa atualizada com sucesso.");
         } catch (SQLException e) {
-            throw new RuntimeException("Erro ao atualizar usuário: " + e.getMessage(), e);
+            throw new RuntimeException(e);
         }
-    }
-
-    public void excluir(int idPessoa) {
-        String sql = "DELETE FROM pessoa WHERE idPessoa=?";
-        try (PreparedStatement stmt = connection.prepareStatement(sql)) {
-            stmt.setInt(1, idPessoa);
-            int linhasAfetadas = stmt.executeUpdate();
-            if (linhasAfetadas > 0) {
-                System.out.println("Usuário excluído com sucesso.");
-            } else {
-                System.out.println("Nenhum usuário encontrado com o ID " + idPessoa);
-            }
-        } catch (SQLException e) {
-            throw new RuntimeException("Erro ao excluir usuário: " + e.getMessage(), e);
-        }
-    }
-
-    public void adicionar(Pessoa novaPessoa) {
     }
 }
+
